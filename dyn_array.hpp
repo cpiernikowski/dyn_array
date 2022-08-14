@@ -120,17 +120,8 @@ namespace cz {
         }
 
         template <template <typename> typename cmp_type, typename other_value_type>
-        bool _compare_sums(dyn_array<other_value_type> const& other) const {
-            if (m_begin == nullptr || other.begin() == nullptr)
-                return false;
-
-            static_assert(std::is_arithmetic<value_type>::value && std::is_arithmetic<other_value_type>::value);
-            using common_t = typename std::common_type<value_type, other_value_type>::type;
-
-            const common_t this_sum  = std::accumulate(begin(), end(), static_cast<common_t>(0));
-            const common_t other_sum = std::accumulate(other.begin(), other.end(), static_cast<common_t>(0));
-
-            return cmp_type<common_t>{}(this_sum, other_sum);
+        dyn_array_always_inline bool _lex_cmp(dyn_array<other_value_type> const& other) const {
+            return std::lexicographical_compare(begin(), end(), other.begin(), other.end(), cmp_type<typename std::common_type<value_type, other_value_type>::type>{});
         }
 
     public:
@@ -138,8 +129,7 @@ namespace cz {
         dyn_array() noexcept(noexcept(allocator_type())) {
         }
 
-        explicit dyn_array(allocator_type const& alloc)
-            noexcept(std::is_nothrow_copy_constructible<allocator_type>::value)
+        explicit dyn_array(allocator_type const& alloc) noexcept(std::is_nothrow_copy_constructible<allocator_type>::value)
             : m_allocator{alloc} {
         }
 
@@ -192,7 +182,7 @@ namespace cz {
         }
 
         dyn_array(dyn_array&& other, allocator_type const& alloc)
-            : m_allocator{other.m_allocator}
+            : m_allocator{alloc}
             , m_begin{other.m_begin}
             , m_size{other.m_size}
             , m_cap{other.m_cap} {
@@ -209,14 +199,16 @@ namespace cz {
         }
 
         ~dyn_array() {
-            if (m_begin != nullptr) {
-                const const_iterator _end = end();
-                for (iterator i = m_begin; i != _end; ++i) {
-                    m_allocator.destroy(i);
-                }
-
-                m_allocator.deallocate(m_begin, m_cap);
+            if (m_begin == nullptr)  {
+                return;
             }
+
+            const const_iterator _end = end();
+            for (iterator i = m_begin; i != _end; ++i) {
+                m_allocator.destroy(i);
+            }
+
+            m_allocator.deallocate(m_begin, m_cap);
         }
 
         dyn_array& operator=(dyn_array const& other) {
@@ -258,43 +250,13 @@ namespace cz {
 
         template <typename other_value_type>
         bool operator==(dyn_array<other_value_type> const& other) const {
-            return _compare_sums<std::equal_to>(other);
-        }
-
-        template <typename other_value_type>
-        dyn_array_always_inline bool operator!=(dyn_array<other_value_type> const& other) const {
-            return _compare_sums<std::not_equal_to>(other);
-        }
-
-        template <typename other_value_type>
-        dyn_array_always_inline bool operator<(dyn_array<other_value_type> const& other) const {
-            return _compare_sums<std::less>(other);
-        }
-
-        template <typename other_value_type>
-        dyn_array_always_inline bool operator>(dyn_array<other_value_type> const& other) const {
-            return _compare_sums<std::greater>(other);
-        }
-
-        template <typename other_value_type>
-        dyn_array_always_inline bool operator<=(dyn_array<other_value_type> const& other) const {
-            return _compare_sums<std::less_equal>(other);
-        }
-
-        template <typename other_value_type>
-        dyn_array_always_inline bool operator>=(dyn_array<other_value_type> const& other) const {
-            return _compare_sums<std::greater_equal>(other);
-        }
-
-        template <typename other_value_type>
-        bool is_identical_to(dyn_array<other_value_type> const& other) const {
             static_assert(detail::not_eq_comparable<value_type, other_value_type>::value);
 
-            if (m_size != other.size()) {
+            if (m_size != other.m_size) {
                 return false;
             }
-
-            auto p = other.begin();
+            
+            auto p = other.const_begin();
             for (auto const& e : *this) {
                 if (e != *p++) {
                     return false;
@@ -304,8 +266,63 @@ namespace cz {
             return true;
         }
 
+        template <typename other_value_type>
+        dyn_array_always_inline bool operator!=(dyn_array<other_value_type> const& other) const {
+            return not (*this == other);
+        }
+
+        template <typename other_value_type>
+        dyn_array_always_inline bool operator<(dyn_array<other_value_type> const& other) const {
+            return _lex_cmp<std::less>(other);
+        }
+
+        template <typename other_value_type>
+        dyn_array_always_inline bool operator>(dyn_array<other_value_type> const& other) const {
+            return _lex_cmp<std::greater>(other);
+        }
+
+        template <typename other_value_type>
+        dyn_array_always_inline bool operator<=(dyn_array<other_value_type> const& other) const {
+            return _lex_cmp<std::less_equal>(other);
+        }
+
+        template <typename other_value_type>
+        dyn_array_always_inline bool operator>=(dyn_array<other_value_type> const& other) const {
+            return _lex_cmp<std::greater_equal>(other);
+        }
+
+        value_type sum() const {
+            return std::accumulate(begin(), end(), value_type{0});
+        }
+
+        template <template <typename> typename cmp_type, typename other_value_type>
+        bool compare_sums(dyn_array<other_value_type> const& other) const {
+            assert(m_begin != nullptr);
+            assert(other.begin() != nullptr);
+            static_assert(std::is_arithmetic<value_type>::value);
+            static_assert(std::is_arithmetic<other_value_type>::value);
+            using common_t = typename std::common_type<value_type, other_value_type>::type;
+
+            const common_t this_sum  = std::accumulate(begin(), end(), common_t{0});
+            const common_t other_sum = std::accumulate(other.begin(), other.end(), common_t{0});
+
+            return cmp_type<common_t>{}(this_sum, other_sum);
+        }
+
         dyn_array_always_inline void set_allocator(allocator_type const& other) noexcept(std::is_nothrow_copy_assignable<allocator_type>::value) {
             m_allocator = other;
+        }
+
+        dyn_array_always_inline allocator_type& get_allocator() noexcept {
+            return m_allocator;
+        }
+
+        dyn_array_always_inline allocator_type const& get_allocator() const noexcept {
+            return m_allocator;
+        }
+
+        dyn_array_always_inline allocator_type const& get_const_allocator() const noexcept {
+            return m_allocator;
         }
 
         dyn_array_always_inline T* begin() noexcept {
@@ -316,11 +333,19 @@ namespace cz {
             return m_begin;
         }
 
+        dyn_array_always_inline const T* const_begin() const noexcept {
+            return m_begin;
+        }
+
         dyn_array_always_inline T* end() noexcept {
             return m_begin + m_size;
         }
 
         dyn_array_always_inline const T* end() const noexcept {
+            return m_begin + m_size;
+        }
+
+        dyn_array_always_inline const T* const_end() const noexcept {
             return m_begin + m_size;
         }
 
