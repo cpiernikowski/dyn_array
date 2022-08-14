@@ -292,7 +292,7 @@ namespace cz {
         }
 
         value_type sum() const {
-            return std::accumulate(begin(), end(), value_type{0});
+            return std::accumulate(begin(), end(), value_type{});
         }
 
         template <template <typename> typename cmp_type, typename other_value_type>
@@ -303,10 +303,10 @@ namespace cz {
             static_assert(std::is_arithmetic<other_value_type>::value);
             using common_t = typename std::common_type<value_type, other_value_type>::type;
 
-            const common_t this_sum  = std::accumulate(begin(), end(), common_t{0});
-            const common_t other_sum = std::accumulate(other.begin(), other.end(), common_t{0});
-
-            return cmp_type<common_t>{}(this_sum, other_sum);
+            return cmp_type<common_t>{}(
+                std::accumulate(begin(), end(), common_t{}),
+                std::accumulate(other.begin(), other.end(), common_t{})
+            );
         }
 
         dyn_array_always_inline void set_allocator(allocator_type const& other) noexcept(std::is_nothrow_copy_assignable<allocator_type>::value) {
