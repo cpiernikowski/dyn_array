@@ -2,7 +2,6 @@
 #define DYN_ARRAY_HPP
 
 #include <memory>
-#include <numeric>
 #include <cassert>
 
 #ifdef __GNUC__
@@ -52,11 +51,11 @@ namespace cz {
         using allocator_type = alloc_t;
         using size_type = std::size_t;
         using reference = T&;
-        using const_reference = const T&;
+        using const_reference = T const&;
         using pointer = T*;
-        using const_pointer = const T*;
+        using const_pointer = T const*;
         using iterator = T*;
-        using const_iterator = const T*;
+        using const_iterator = T const*;
 
     private:
 
@@ -363,7 +362,7 @@ namespace cz {
             m_allocator.construct(m_begin + m_size++, std::forward<Types>(args)...);
         }
 
-        value_type pop_back() {
+        dyn_array_always_inline value_type pop_back() {
             assert(m_size > 0);
             return std::move(m_begin[--m_size]);
         }
@@ -462,7 +461,7 @@ namespace cz {
         }
 
         dyn_array_always_inline std::reverse_iterator<iterator> rbegin() const {
-            return std::reverse_iterator<iterator>(begin());
+            return std::reverse_iterator<const_iterator>(begin());
         }
 
         dyn_array_always_inline iterator end() noexcept {
@@ -482,7 +481,7 @@ namespace cz {
         }
 
         dyn_array_always_inline std::reverse_iterator<iterator> rend() const {
-            return std::reverse_iterator<iterator>(end());
+            return std::reverse_iterator<const_iterator>(end());
         }
 
         dyn_array_always_inline size_type size() const noexcept {
