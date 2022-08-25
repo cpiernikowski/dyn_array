@@ -28,7 +28,7 @@ namespace cz {
         };
     }
 
-    constexpr std::size_t operator""_uz(unsigned long long arg) {
+    dyn_array_always_inline constexpr std::size_t operator""_uz(unsigned long long arg) {
         return static_cast<std::size_t>(arg);
     }
 
@@ -51,15 +51,12 @@ namespace cz {
         using value_type = T;
         using allocator_type = alloc_t;
         using size_type = std::size_t;
-        using difference_type = std::ptrdiff_t;
         using reference = T&;
         using const_reference = const T&;
         using pointer = T*;
         using const_pointer = const T*;
         using iterator = T*;
         using const_iterator = const T*;
-        using reverse_iterator = T*;
-        using const_reverse_iterator = const T*;
 
     private:
 
@@ -80,13 +77,27 @@ namespace cz {
             m_begin = m_allocator.allocate(m_cap);
         }
 
+        void _set_cap_and_realloc(size_type minimal_cap) {
+            if (m_cap == 0_uz) {
+                m_cap = initial_cap;
+            }
+
+            size_type new_cap = m_cap;
+
+            while (new_cap < minimal_cap) {
+                new_cap *= multiplier;
+            }
+
+            _realloc(new_cap);
+        }
+
         void _fill_with_val(const_reference value = {}) {
             static_assert(std::is_default_constructible<value_type>::value);
             assert(m_begin != nullptr && "dyn_array internal error");
 
             const const_iterator _end = end();
-            for (iterator i = m_begin; i != _end; ++i) {
-                m_allocator.construct(i, value);
+            for (iterator it = m_begin; it != _end; ++it) {
+                m_allocator.construct(it, value);
             }
         }
 
@@ -95,8 +106,8 @@ namespace cz {
             assert(m_begin != nullptr && "dyn_array internal error");
 
             const const_iterator _end = end();
-            for (iterator i = m_begin; i != _end; ++i) {
-                m_allocator.construct(i, *f++);
+            for (iterator it = m_begin; it != _end; ++it) {
+                m_allocator.construct(it, *f++);
             }
         }
 
@@ -106,8 +117,8 @@ namespace cz {
             }
 
             const const_iterator _end = end();
-            for (iterator i = m_begin; i != _end; ++i) {
-                m_allocator.destroy(i);
+            for (iterator it = m_begin; it != _end; ++it) {
+                m_allocator.destroy(it);
             }
         }
 
@@ -117,6 +128,21 @@ namespace cz {
             }
 
             m_allocator.deallocate(m_begin, m_cap);
+        }
+
+        void _realloc(size_type size) {
+            const auto old_p = m_begin;
+            m_begin = m_allocator.allocate(size);
+
+            for (size_type i = 0; i < m_size; ++i) {
+                m_allocator.construct(m_begin + i, std::move(old_p[i]));
+            }
+
+            if (old_p) {
+                m_allocator.deallocate(old_p, m_cap);
+            }
+
+            m_cap = size;
         }
 
         template <template <typename> typename cmp_type, typename other_value_type>
@@ -133,10 +159,9 @@ namespace cz {
             : m_allocator{alloc} {
         }
 
-        explicit dyn_array(size_type count, T const& value, allocator_type const& alloc = {})
+        dyn_array(size_type count, T const& value, allocator_type const& alloc = {})
             : m_allocator{alloc}
             , m_size{count} {
-            static_assert(std::is_default_constructible<allocator_type>::value);
             _set_cap_and_alloc(count);
             _fill_with_val(value);
         }
@@ -151,7 +176,7 @@ namespace cz {
         template <typename InIterator>
         dyn_array(InIterator f, InIterator l, allocator_type const& alloc = {})
             : m_allocator{alloc}
-            , m_size{static_cast<std::size_t>(l - f)} {
+            , m_size{static_cast<std::size_t>(std::distance(f, l))} {
             static_assert(std::is_convertible<decltype(*f), value_type>::value);
             _set_cap_and_alloc(m_size);
             _fill_from_range_unchecked(f);
@@ -212,9 +237,7 @@ namespace cz {
         }
 
         dyn_array& operator=(dyn_array const& other) {
-            if (this == &other) {
-                return *this;
-            }
+            assert(this != &other);
 
             _destroy_all();
 
@@ -230,9 +253,7 @@ namespace cz {
         }
 
         dyn_array& operator=(dyn_array&& other) {
-            if (this == &other) {
-                return *this;
-            }
+            assert(this != &other);
 
             _destroy_all();
             _dealloc();
@@ -248,10 +269,9 @@ namespace cz {
             return *this;
         }
 
-        template <typename other_value_type>
+        template <typename other_value_type,
+        typename = typename std::enable_if<detail::not_eq_comparable<value_type, other_value_type>::value>::type>
         bool operator==(dyn_array<other_value_type> const& other) const {
-            static_assert(detail::not_eq_comparable<value_type, other_value_type>::value);
-
             if (m_size != other.m_size) {
                 return false;
             }
@@ -291,26 +311,126 @@ namespace cz {
             return _lex_cmp<std::greater_equal>(other);
         }
 
-        value_type sum() const {
-            return std::accumulate(begin(), end(), value_type{});
+        dyn_array_always_inline reference operator[](size_type idx) {
+            assert(idx < m_size);
+            return m_begin[idx];
         }
 
-        template <template <typename> typename cmp_type, typename other_value_type>
-        bool compare_sums(dyn_array<other_value_type> const& other) const {
-            assert(m_begin != nullptr);
-            assert(other.begin() != nullptr);
-            static_assert(std::is_arithmetic<value_type>::value);
-            static_assert(std::is_arithmetic<other_value_type>::value);
-            using common_t = typename std::common_type<value_type, other_value_type>::type;
-
-            return cmp_type<common_t>{}(
-                std::accumulate(begin(), end(), common_t{}),
-                std::accumulate(other.begin(), other.end(), common_t{})
-            );
+        dyn_array_always_inline const_reference operator[](size_type idx) const {
+            assert(idx < m_size);
+            return m_begin[idx];
         }
 
+        dyn_array_always_inline dyn_array operator[](std::pair<size_type, size_type> idxes) const { // [first, last)
+            assert(idxes.first <= idxes.second && idxes.first < m_size && idxes.second <= m_size);
+            return dyn_array(m_begin + idxes.first, m_begin + idxes.second);
+        }
+
+        dyn_array_always_inline void reserve(size_type n) {
+            if (m_cap < n) {
+                _realloc(n);
+            }
+        }
+
+        dyn_array_always_inline void shrink_to_fit() {
+            if (m_size < m_cap) {
+                _realloc(m_size);
+            }
+        }
+
+        void push_back(T const& arg) {
+            if (m_size == m_cap) {
+                _set_cap_and_realloc(m_size + 1);
+            }
+
+            m_allocator.construct(m_begin + m_size++, arg);
+        }
+
+        void push_back(T&& arg) {
+            if (m_size == m_cap) {
+                _set_cap_and_realloc(m_size + 1);
+            }
+
+            m_allocator.construct(m_begin + m_size++, std::move(arg));
+        }
+
+        template <typename... Types>
+        void emplace_back(Types&&... args) {
+            if (m_size == m_cap) {
+                _set_cap_and_realloc(m_size + 1);
+            }
+
+            m_allocator.construct(m_begin + m_size++, std::forward<Types>(args)...);
+        }
+
+        value_type pop_back() {
+            assert(m_size > 0);
+            return std::move(m_begin[--m_size]);
+        }
+
+        void remove_at(size_type idx) {
+            for (auto _end = --m_size; idx < _end; ++idx) {
+                m_begin[idx] = std::move(m_begin[idx + 1]);
+            }
+        }
+
+        void resize(size_type n) {
+            if (m_cap < n) {
+                _realloc(n);
+            }
+
+            for (size_type i = n; i < m_size; ++i) {
+                m_allocator.destroy(m_begin + i);
+            }
+
+            for (size_type i = m_size; i < n; ++i) {
+                m_allocator.construct(m_begin + i);
+            }
+
+            m_size = n;
+        }
+
+        void clear() {
+            _destroy_all();
+            m_size = 0;
+        }
+
+        dyn_array_always_inline reference front() noexcept {
+            assert(m_size > 0);
+            return *m_begin;
+        }
+
+        dyn_array_always_inline const_reference front() const noexcept {
+            assert(m_size > 0);
+            return *m_begin;
+        }
+
+        dyn_array_always_inline reference back() noexcept {
+            assert(m_size > 0);
+            return m_begin[m_size - 1];
+        }
+
+        dyn_array_always_inline const_reference back() const noexcept {
+            assert(m_size > 0);
+            return m_begin[m_size - 1];
+        }
+
+        dyn_array_always_inline pointer data() noexcept {
+            return m_begin;
+        }
+
+        dyn_array_always_inline const_pointer data() const noexcept {
+            return m_begin;
+        }
+
+        template <typename = typename std::enable_if<std::is_copy_assignable<allocator_type>::value>::type>
         dyn_array_always_inline void set_allocator(allocator_type const& other) noexcept(std::is_nothrow_copy_assignable<allocator_type>::value) {
             m_allocator = other;
+        }
+
+        template <typename = typename std::enable_if<std::is_move_assignable<allocator_type>::value>::type>
+        dyn_array_always_inline void set_allocator(allocator_type&& other) noexcept(std::is_nothrow_move_assignable<allocator_type>::value) {
+            m_allocator = std::move(other);
         }
 
         dyn_array_always_inline allocator_type& get_allocator() noexcept {
@@ -325,28 +445,44 @@ namespace cz {
             return m_allocator;
         }
 
-        dyn_array_always_inline T* begin() noexcept {
+        dyn_array_always_inline iterator begin() noexcept {
             return m_begin;
         }
 
-        dyn_array_always_inline const T* begin() const noexcept {
+        dyn_array_always_inline const_iterator begin() const noexcept {
             return m_begin;
         }
 
-        dyn_array_always_inline const T* const_begin() const noexcept {
+        dyn_array_always_inline const_iterator const_begin() const noexcept {
             return m_begin;
         }
 
-        dyn_array_always_inline T* end() noexcept {
+        dyn_array_always_inline std::reverse_iterator<iterator> rbegin() {
+            return std::reverse_iterator<iterator>(begin());
+        }
+
+        dyn_array_always_inline std::reverse_iterator<iterator> rbegin() const {
+            return std::reverse_iterator<iterator>(begin());
+        }
+
+        dyn_array_always_inline iterator end() noexcept {
             return m_begin + m_size;
         }
 
-        dyn_array_always_inline const T* end() const noexcept {
+        dyn_array_always_inline const_iterator end() const noexcept {
             return m_begin + m_size;
         }
 
-        dyn_array_always_inline const T* const_end() const noexcept {
+        dyn_array_always_inline const_iterator const_end() const noexcept {
             return m_begin + m_size;
+        }
+
+        dyn_array_always_inline std::reverse_iterator<iterator> rend() {
+            return std::reverse_iterator<iterator>(end());
+        }
+
+        dyn_array_always_inline std::reverse_iterator<iterator> rend() const {
+            return std::reverse_iterator<iterator>(end());
         }
 
         dyn_array_always_inline size_type size() const noexcept {
@@ -355,6 +491,10 @@ namespace cz {
 
         dyn_array_always_inline size_type cap() const noexcept {
             return m_cap;
+        }
+
+        dyn_array_always_inline bool is_empty() const noexcept {
+            return m_size == 0;
         }
     };
 }
