@@ -339,7 +339,7 @@ namespace cz {
 
         void push_back(T const& arg) {
             if (m_size == m_cap) {
-                _set_cap_and_realloc(m_size + 1);
+                _set_cap_and_realloc(m_size + 1_uz);
             }
 
             m_allocator.construct(m_begin + m_size++, arg);
@@ -347,7 +347,7 @@ namespace cz {
 
         void push_back(T&& arg) {
             if (m_size == m_cap) {
-                _set_cap_and_realloc(m_size + 1);
+                _set_cap_and_realloc(m_size + 1_uz);
             }
 
             m_allocator.construct(m_begin + m_size++, std::move(arg));
@@ -356,20 +356,20 @@ namespace cz {
         template <typename... Types>
         void emplace_back(Types&&... args) {
             if (m_size == m_cap) {
-                _set_cap_and_realloc(m_size + 1);
+                _set_cap_and_realloc(m_size + 1_uz);
             }
 
             m_allocator.construct(m_begin + m_size++, std::forward<Types>(args)...);
         }
 
         dyn_array_always_inline value_type pop_back() {
-            assert(m_size > 0);
+            assert(m_size > 0_uz);
             return std::move(m_begin[--m_size]);
         }
 
         void remove_at(size_type idx) {
             for (auto _end = --m_size; idx < _end; ++idx) {
-                m_begin[idx] = std::move(m_begin[idx + 1]);
+                m_begin[idx] = std::move(m_begin[idx + 1_uz]);
             }
         }
 
@@ -391,27 +391,27 @@ namespace cz {
 
         void clear() {
             _destroy_all();
-            m_size = 0;
+            m_size = 0_uz;
         }
 
         dyn_array_always_inline reference front() noexcept {
-            assert(m_size > 0);
+            assert(m_size > 0_uz);
             return *m_begin;
         }
 
         dyn_array_always_inline const_reference front() const noexcept {
-            assert(m_size > 0);
+            assert(m_size > 0_uz);
             return *m_begin;
         }
 
         dyn_array_always_inline reference back() noexcept {
-            assert(m_size > 0);
-            return m_begin[m_size - 1];
+            assert(m_size > 0_uz);
+            return m_begin[m_size - 1_uz];
         }
 
         dyn_array_always_inline const_reference back() const noexcept {
-            assert(m_size > 0);
-            return m_begin[m_size - 1];
+            assert(m_size > 0_uz);
+            return m_begin[m_size - 1_uz];
         }
 
         dyn_array_always_inline pointer data() noexcept {
@@ -493,7 +493,7 @@ namespace cz {
         }
 
         dyn_array_always_inline bool is_empty() const noexcept {
-            return m_size == 0;
+            return m_size == 0_uz;
         }
     };
 }
