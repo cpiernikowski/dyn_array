@@ -91,7 +91,6 @@ namespace cz {
         }
 
         void _fill_with_val(const_reference value = {}) {
-            static_assert(std::is_default_constructible<value_type>::value);
             assert(m_begin != nullptr && "dyn_array internal error");
 
             const const_iterator _end = end();
@@ -201,8 +200,8 @@ namespace cz {
             , m_size{other.m_size}
             , m_cap{other.m_cap} {
             other.m_begin = nullptr;
-            other.m_size = 0;
-            other.m_cap = 0;
+            other.m_size = 0_uz;
+            other.m_cap = 0_uz;
         }
 
         dyn_array(dyn_array&& other, allocator_type const& alloc)
@@ -310,12 +309,12 @@ namespace cz {
             return _lex_cmp<std::greater_equal>(other);
         }
 
-        dyn_array_always_inline reference operator[](size_type idx) {
+        dyn_array_always_inline reference operator[](size_type idx) noexcept {
             assert(idx < m_size);
             return m_begin[idx];
         }
 
-        dyn_array_always_inline const_reference operator[](size_type idx) const {
+        dyn_array_always_inline const_reference operator[](size_type idx) const noexcept {
             assert(idx < m_size);
             return m_begin[idx];
         }
@@ -392,6 +391,10 @@ namespace cz {
         void clear() {
             _destroy_all();
             m_size = 0_uz;
+        }
+
+        dyn_array_always_inline dyn_array slice(size_type f, size_type l) { // [first, last)
+            return (*this)[{f, l}];
         }
 
         dyn_array_always_inline reference front() noexcept {
