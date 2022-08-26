@@ -267,10 +267,20 @@ namespace cz {
             return *this;
         }
 
-        template <typename other_value_type,
-        typename = typename std::enable_if<detail::not_eq_comparable<value_type, other_value_type>::value>::type>
+        template <typename other_value_type>
         bool operator==(dyn_array<other_value_type> const& other) const {
-            return m_size == other.m_size && std::equal(begin(), end(), other.begin());
+            if (m_size != other.m_size) {
+                return false;
+            }
+
+            auto p = other.const_begin();
+            for (auto const& e : *this) {
+                if (e != *p++) {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         template <typename other_value_type>
