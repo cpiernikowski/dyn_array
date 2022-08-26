@@ -270,18 +270,7 @@ namespace cz {
         template <typename other_value_type,
         typename = typename std::enable_if<detail::not_eq_comparable<value_type, other_value_type>::value>::type>
         bool operator==(dyn_array<other_value_type> const& other) const {
-            if (m_size != other.m_size) {
-                return false;
-            }
-            
-            auto p = other.const_begin();
-            for (auto const& e : *this) {
-                if (e != *p++) {
-                    return false;
-                }
-            }
-
-            return true;
+            return m_size == other.m_size && std::equal(begin(), end(), other.begin());
         }
 
         template <typename other_value_type>
@@ -367,6 +356,7 @@ namespace cz {
         }
 
         void remove_at(size_type idx) {
+            assert(idx < m_size);
             for (auto _end = --m_size; idx < _end; ++idx) {
                 m_begin[idx] = std::move(m_begin[idx + 1_uz]);
             }
